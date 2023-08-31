@@ -1,22 +1,40 @@
 use digital_signature::{AccountInfo, InMemDB};
-use rocket::{
-    serde::{json::Json, Deserialize},
-    State,
-};
+use rocket::{serde::json::Json, State};
+use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 #[macro_use]
 extern crate rocket;
 
-#[post("/message")]
-fn create_account(db: &State<InMemDB>) -> &'static str {
-    let locked_db = db.db.lock().unwrap();
-    let acct = locked_db.get("Test");
-    println!("{:?}", &acct);
-    "Account Created"
+#[derive(Deserialize, Debug)]
+#[serde(crate = "rocket::serde")]
+struct Acct<'r> {
+    account_name: &'r str,
+    public_key: &'r str,
 }
 
-#[post("/register")]
-fn register_user(db: &State<InMemDB>) -> &'static str {
+#[derive(Serialize)]
+struct RegResponse {
+    account_name: String,
+    nonce: String,
+}
+
+#[post("/register", format = "json", data = "<acct>")]
+fn register_user(db: &State<InMemDB>, acct: Json<Acct<'_>>) -> Json<RegResponse> {
+    println!("{:?}", &acct);
+    let mut locked_db = db.db.lock().unwrap();
+    let v = AccountInfo::new(String::from(acct.public_key));
+    locked_db.insert(String::from(acct.account_name), v);
+    let a = locked_db.get(&String::from(acct.account_name)).unwrap();
+
+    Json(RegResponse {
+        account_name: String::from(acct.account_name),
+        nonce: String::from(a.nonce()),
+    })
+}
+
+#[post("/message")]
+fn message(db: &State<InMemDB>) -> &'static str {
     db.db.lock().unwrap().insert(
         String::from("Test"),
         AccountInfo::new(String::from("PUBLIC_KEY")),
@@ -24,13 +42,13 @@ fn register_user(db: &State<InMemDB>) -> &'static str {
     "register user"
 }
 #[get("/")]
-fn index(db: &State<InMemDB>) -> &'static str {
+fn index() -> &'static str {
     "Hello, world!"
 }
 
 #[launch]
 fn rocket() -> _ {
     rocket::build()
-        .mount("/", routes![index, create_account])
+        .mount("/", routes![index, register_user, message])
         .manage(InMemDB::new())
 }
