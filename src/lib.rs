@@ -24,3 +24,17 @@ impl InMemDB {
         }
     }
 }
+
+#[cfg(test)]
+mod account_info_tests {
+    use super::AccountInfo;
+    #[test]
+    fn constructor() {
+        let account_info = AccountInfo::new(String::from("public_key"));
+        assert_eq!(account_info.public_key, "public_key");
+        assert_eq!(account_info.nonce, "CHANGE ME");
+    }
+}
+
+#[cfg(test)]
+mod in_mem_db_tests {}
