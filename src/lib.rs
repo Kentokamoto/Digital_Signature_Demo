@@ -1,9 +1,11 @@
 use std::{
     collections::HashMap,
+    fmt::Debug,
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[derive(Debug)]
 pub struct AccountInfo {
     public_key: String,
     nonce: String,
@@ -15,6 +17,7 @@ fn generate_nonce() -> String {
         .as_millis()
         .to_string()
 }
+
 impl AccountInfo {
     pub fn new(public_key: String) -> AccountInfo {
         let nonce = generate_nonce();
@@ -27,6 +30,9 @@ impl AccountInfo {
     pub fn nonce(&self) -> &String {
         &self.nonce
     }
+}
+pub enum InMemDBError {
+    AccountNotFoundError,
 }
 pub struct InMemDB {
     pub db: Mutex<HashMap<String, AccountInfo>>,
