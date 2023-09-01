@@ -1,27 +1,15 @@
-use digital_signature::{AccountInfo, InMemDB};
+use digital_signature::{
+    database::{AccountInfo, InMemDB},
+    request::Acct,
+    response::RegResponse,
+};
 use rocket::{serde::json::Json, State};
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
 
 #[macro_use]
 extern crate rocket;
 
-#[derive(Deserialize, Debug)]
-#[serde(crate = "rocket::serde")]
-struct Acct<'r> {
-    account_name: &'r str,
-    public_key: &'r str,
-}
-
-#[derive(Serialize)]
-struct RegResponse {
-    account_name: String,
-    nonce: String,
-}
-
 #[post("/register", format = "json", data = "<acct>")]
 fn register_user(db: &State<InMemDB>, acct: Json<Acct<'_>>) -> Json<RegResponse> {
-    println!("{:?}", &acct);
     let mut locked_db = db.db.lock().unwrap();
     let v = AccountInfo::new(String::from(acct.public_key));
     locked_db.insert(String::from(acct.account_name), v);
