@@ -82,17 +82,34 @@ pub mod response {
 #[cfg(test)]
 mod signature_tests {
     use super::signature;
-    use ed25519_dalek::{VerifyingKey, PUBLIC_KEY_LENGTH};
-    use generic_array::{arr, GenericArray};
+    use ed25519_dalek::{
+        pkcs8::{DecodePrivateKey, DecodePublicKey},
+        Signature, Signer, SigningKey, Verifier, VerifyingKey,
+    };
     use hex;
 
-    const PRIVATE_KEY : &str= "MHQCAQEEIDgqJ4GwH9RpXQgCaPRtC3Cj4ilAlUM18IBVgWct7iLaoAcGBSuBBAAKoUQDQgAEh5Q4EaEIxze8dPbTb11MJ/9apwXaAJSpuwQER1mTn7zDlkIyFRGJt32i8ZFGIWajsykfdLUvVWpF7YMxWf31fg==";
-    const PUBLIC_KEY : &str= "MFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAEh5Q4EaEIxze8dPbTb11MJ/9apwXaAJSpuwQER1mTn7zDlkIyFRGJt32i8ZFGIWajsykfdLUvVWpF7YMxWf31fg==";
+    const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIPYiycRfCG/4PDFHg+Xkcco0GqH/1AfuaGpwtkZ5EOEq
+-----END PRIVATE KEY-----";
+    const PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
+-----END PUBLIC KEY-----";
     const MESSAGE: &str = "The British are coming, the British are coming\n";
     const DIGEST: &str = "a4a13eb5b1297c55e7932bdc46bffba226e55d094406e429ee10661c0cb99b4d";
 
     #[test]
-    fn decrypt_valid_test() {}
+    fn decrypt_valid_test() {
+        let signing_key: SigningKey =
+            SigningKey::from_pkcs8_pem(&PRIVATE_KEY).expect("Invalid Private Key");
+        let verifying_key: VerifyingKey =
+            VerifyingKey::from_public_key_pem(&PUBLIC_KEY).expect("Invalid Public Key");
+
+        let signature: Signature = signing_key.sign(&MESSAGE.as_bytes());
+        println!("Signature: {:?}", signature);
+        assert!(verifying_key
+            .verify(&MESSAGE.as_bytes(), &signature)
+            .is_ok());
+    }
 
     #[test]
     fn hash() {
