@@ -1,4 +1,8 @@
 pub mod database {
+    use ed25519_dalek::{
+        pkcs8::{DecodePrivateKey, DecodePublicKey},
+        Signature, Signer, SigningKey, Verifier, VerifyingKey,
+    };
     use std::{
         collections::HashMap,
         fmt::Debug,
@@ -21,8 +25,22 @@ pub mod database {
         pub fn public_key(&self) -> &String {
             &self.public_key
         }
+
+        pub fn verify_message(&self, message: &String, signature: &String) -> bool {
+            let verifying_key: VerifyingKey =
+                VerifyingKey::from_public_key_pem(&self.public_key).expect("Invalid Public Key");
+
+            let sig: Signature = Signature::from_bytes(signature.as_bytes().try_into().unwrap());
+            verifying_key.verify(message.as_bytes(), &sig);
+            true
+        }
+
         pub fn nonce(&self) -> &String {
             &self.nonce
+        }
+
+        pub fn verify_nonce(&self, input_nonce: &String) -> bool {
+            self.nonce.eq(input_nonce)
         }
     }
 
@@ -82,11 +100,11 @@ pub mod response {
 #[cfg(test)]
 mod signature_tests {
     use super::signature;
+    use base64::{engine::general_purpose, Engine};
     use ed25519_dalek::{
         pkcs8::{DecodePrivateKey, DecodePublicKey},
         Signature, Signer, SigningKey, Verifier, VerifyingKey,
     };
-    use hex;
 
     const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
 MC4CAQAwBQYDK2VwBCIEIPYiycRfCG/4PDFHg+Xkcco0GqH/1AfuaGpwtkZ5EOEq
@@ -95,7 +113,14 @@ MC4CAQAwBQYDK2VwBCIEIPYiycRfCG/4PDFHg+Xkcco0GqH/1AfuaGpwtkZ5EOEq
 MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
 -----END PUBLIC KEY-----";
     const MESSAGE: &str = "The British are coming, the British are coming\n";
-    const DIGEST: &str = "a4a13eb5b1297c55e7932bdc46bffba226e55d094406e429ee10661c0cb99b4d";
+    const OTHER_SIGNATURE: &str =
+        "X+d7aJnuKShO3hgjJb/BzrkGUtAb3ts5al79O5bz7rABk/SAiya7HK7XMLt2jA3ZT/tiAMhhWXakH6/IH8gpBQ==";
+    const SIGNATURE: [u8; 64] = [
+        95, 231, 123, 104, 153, 238, 41, 40, 78, 222, 24, 35, 37, 191, 193, 206, 185, 6, 82, 208,
+        27, 222, 219, 57, 106, 94, 253, 59, 150, 243, 238, 176, 1, 147, 244, 128, 139, 38, 187, 28,
+        174, 215, 48, 187, 118, 140, 13, 217, 79, 251, 98, 0, 200, 97, 89, 118, 164, 31, 175, 200,
+        31, 200, 41, 5,
+    ];
 
     #[test]
     fn decrypt_valid_test() {
@@ -105,16 +130,13 @@ MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
             VerifyingKey::from_public_key_pem(&PUBLIC_KEY).expect("Invalid Public Key");
 
         let signature: Signature = signing_key.sign(&MESSAGE.as_bytes());
-        println!("Signature: {:?}", signature);
+        let b64: String = general_purpose::STANDARD.encode(&signature.to_bytes());
+        assert_eq!(OTHER_SIGNATURE, b64);
+        assert_eq!(signature.to_bytes(), SIGNATURE);
+
         assert!(verifying_key
             .verify(&MESSAGE.as_bytes(), &signature)
             .is_ok());
-    }
-
-    #[test]
-    fn hash() {
-        let hash_val = signature::hash(&MESSAGE);
-        assert_eq!(hex::decode(DIGEST).unwrap(), hash_val.to_vec())
     }
 }
 #[cfg(test)]
