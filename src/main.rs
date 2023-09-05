@@ -1,6 +1,6 @@
 use digital_signature::{
     database::{AccountInfo, InMemDB},
-    request::Acct,
+    request::{Acct, SignedMessage},
     response::RegResponse,
 };
 use rocket::{http::Status, serde::json::Json, State};
@@ -48,11 +48,55 @@ fn register_user(db: &State<InMemDB>, acct: Json<Acct>) -> (Status, Json<RegResp
     )
 }
 
-#[post("/message")]
-fn message(db: &State<InMemDB>) -> &'static str {
+#[post("/message", format = "json", data = "<msg>")]
+fn message(db: &State<InMemDB>, msg: Json<SignedMessage>) -> (Status, Json<RegResponse>) {
     let mut locked_db = db.db.lock().unwrap();
+    if !locked_db.contains_key(msg.account_name.as_str()) {
+        return (
+            Status::NotFound,
+            Json(RegResponse {
+                account_name: String::from(&msg.account_name),
+                nonce: 0,
+                message: String::from("Account not found"),
+            }),
+        );
+    }
 
-    "register user"
+    let acct = locked_db.get_mut(&msg.account_name).unwrap();
+    if !acct.verify_nonce(&msg.nonce) {
+        (*acct).new_nonce();
+        return (
+            Status::NotAcceptable,
+            Json(RegResponse {
+                account_name: String::from(&msg.account_name),
+                nonce: *acct.nonce(),
+                message: String::from("Invalid Nonce"),
+            }),
+        );
+    }
+    (*acct).new_nonce();
+    match acct.verify_message(&msg.message, &msg.digest.as_str()) {
+        Ok(()) => (),
+        Err(e) => {
+            return (
+                Status::NotAcceptable,
+                Json(RegResponse {
+                    account_name: String::from(&msg.account_name),
+                    nonce: *acct.nonce(),
+                    message: String::from(e.message),
+                }),
+            )
+        }
+    }
+
+    (
+        Status::Accepted,
+        Json(RegResponse {
+            account_name: String::from(""),
+            nonce: *acct.nonce(),
+            message: String::from("ACK"),
+        }),
+    )
 }
 #[get("/")]
 fn index() -> &'static str {

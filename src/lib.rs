@@ -126,9 +126,11 @@ pub mod request {
 
     #[derive(Deserialize, Debug)]
     #[serde(crate = "rocket::serde")]
-    pub struct message {
+    pub struct SignedMessage {
         pub account_name: String,
-        pub nonce: String,
+        pub nonce: u128,
+        pub message: String,
+        pub digest: String,
     }
 }
 pub mod response {
