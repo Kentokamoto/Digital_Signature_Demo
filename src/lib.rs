@@ -11,10 +11,10 @@ pub mod database {
     #[derive(Debug)]
     pub struct AccountInfo {
         public_key: String,
-        nonce: String,
+        nonce: u128,
     }
     pub struct AccountInfoError {
-        message: String,
+        pub message: String,
     }
 
     impl fmt::Display for AccountInfoError {
@@ -34,9 +34,14 @@ pub mod database {
         }
     }
     impl AccountInfo {
-        pub fn new(public_key: String) -> AccountInfo {
+        pub fn new(public_key: String) -> Result<AccountInfo, AccountInfoError> {
             let nonce = generate_nonce();
-            AccountInfo { public_key, nonce }
+            match VerifyingKey::from_public_key_pem(&public_key.as_str()) {
+                Ok(_) => Ok(AccountInfo { public_key, nonce }),
+                Err(e) => Err(AccountInfoError {
+                    message: e.to_string(),
+                }),
+            }
         }
 
         pub fn public_key(&self) -> &String {
@@ -78,13 +83,13 @@ pub mod database {
             }
         }
 
-        pub fn nonce(&self) -> &String {
+        pub fn nonce(&self) -> &u128 {
             &self.nonce
         }
         pub fn new_nonce(&mut self) {
             self.nonce = generate_nonce();
         }
-        pub fn verify_nonce(&self, input_nonce: &String) -> bool {
+        pub fn verify_nonce(&self, input_nonce: &u128) -> bool {
             self.nonce.eq(input_nonce)
         }
     }
@@ -101,12 +106,11 @@ pub mod database {
         }
     }
 
-    fn generate_nonce() -> String {
+    fn generate_nonce() -> u128 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis()
-            .to_string()
     }
 }
 
@@ -115,9 +119,16 @@ pub mod request {
     use std::fmt::Debug;
     #[derive(Deserialize, Debug)]
     #[serde(crate = "rocket::serde")]
-    pub struct Acct<'r> {
-        pub account_name: &'r str,
-        pub public_key: &'r str,
+    pub struct Acct {
+        pub account_name: String,
+        pub public_key: String,
+    }
+
+    #[derive(Deserialize, Debug)]
+    #[serde(crate = "rocket::serde")]
+    pub struct message {
+        pub account_name: String,
+        pub nonce: String,
     }
 }
 pub mod response {
@@ -125,34 +136,43 @@ pub mod response {
     #[derive(Serialize)]
     pub struct RegResponse {
         pub account_name: String,
-        pub nonce: String,
+        pub nonce: u128,
+        pub message: String,
+    }
+    pub struct ResponseErr {
+        pub message: String,
     }
 }
 #[cfg(test)]
-mod signature_tests {
+mod account_info_tests {
     use super::database::AccountInfo;
     use ed25519_dalek::{
         pkcs8::{DecodePrivateKey, DecodePublicKey},
         Signature, Signer, SigningKey, Verifier, VerifyingKey,
     };
 
-    const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIPYiycRfCG/4PDFHg+Xkcco0GqH/1AfuaGpwtkZ5EOEq
------END PRIVATE KEY-----";
-    const PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
------END PUBLIC KEY-----";
-    const MESSAGE: &str = "The British are coming, the British are coming\n";
+    const PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIPYiycRfCG/4PDFHg+Xkcco0GqH/1AfuaGpwtkZ5EOEq\n-----END PRIVATE KEY-----";
+    const PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=\n-----END PUBLIC KEY-----";
+    const MESSAGE: &str = "I need twenty-five dollar bills\n";
     const SIGNATURE: &str =
-        "X+d7aJnuKShO3hgjJb/BzrkGUtAb3ts5al79O5bz7rABk/SAiya7HK7XMLt2jA3ZT/tiAMhhWXakH6/IH8gpBQ==";
+        "gBgj3wtNB2GwtpooYi3KIG9wTHYmvu1DIOiNA6Q6wy3EhN20j+tRsbJ4cDcVJZCrQlS0cSB0Y/zEC74AUB3cDQ==";
+
+    #[test]
+    fn constructor() {
+        let account_info =
+            AccountInfo::new(String::from(PUBLIC_KEY).replace("\n", "\r\n")).unwrap();
+        assert_eq!(account_info.public_key(), &PUBLIC_KEY.replace("\n", "\r\n"));
+    }
 
     #[test]
     fn message_verify_valid_test() {
-        let a = AccountInfo::new(String::from(PUBLIC_KEY));
+        let a = AccountInfo::new(String::from(PUBLIC_KEY).replace("\n", "\r\n")).unwrap();
         let signing_key: SigningKey =
-            SigningKey::from_pkcs8_pem(&PRIVATE_KEY).expect("Invalid Private Key");
+            SigningKey::from_pkcs8_pem(&PRIVATE_KEY.replace("\n", "\r\n"))
+                .expect("Invalid Private Key");
         let verifying_key: VerifyingKey =
-            VerifyingKey::from_public_key_pem(&PUBLIC_KEY).expect("Invalid Public Key");
+            VerifyingKey::from_public_key_pem(&PUBLIC_KEY.replace("\n", "\r\n"))
+                .expect("Invalid Public Key");
 
         let signature: Signature = signing_key.sign(&MESSAGE.as_bytes());
 
@@ -163,30 +183,20 @@ MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
     }
     #[test]
     fn message_verify_tampered_test() {
-        let a = AccountInfo::new(String::from(PUBLIC_KEY));
+        let a = AccountInfo::new(String::from(PUBLIC_KEY).replace("\n", "\r\n")).unwrap();
         let signing_key: SigningKey =
-            SigningKey::from_pkcs8_pem(&PRIVATE_KEY).expect("Invalid Private Key");
+            SigningKey::from_pkcs8_pem(&PRIVATE_KEY.replace("\n", "\r\n"))
+                .expect("Invalid Private Key");
         let verifying_key: VerifyingKey =
-            VerifyingKey::from_public_key_pem(&PUBLIC_KEY).expect("Invalid Public Key");
+            VerifyingKey::from_public_key_pem(&PUBLIC_KEY.replace("\n", "\r\n"))
+                .expect("Invalid Public Key");
 
         let signature: Signature = signing_key.sign(&MESSAGE.as_bytes());
-        let altered_message = String::from("Coast is clear");
-
+        let mut altered_message = String::from(MESSAGE);
+        altered_message = altered_message.replace("twenty-five dollar", "twenty five-dollar");
         assert!(verifying_key
             .verify(&altered_message.as_bytes(), &signature)
             .is_err());
         assert!(a.verify_message(&altered_message, &SIGNATURE).is_err());
     }
 }
-#[cfg(test)]
-mod account_info_tests {
-    use super::database::AccountInfo;
-    #[test]
-    fn constructor() {
-        let account_info = AccountInfo::new(String::from("public_key"));
-        assert_eq!(account_info.public_key(), "public_key");
-    }
-}
-
-#[cfg(test)]
-mod in_mem_db_tests {}
