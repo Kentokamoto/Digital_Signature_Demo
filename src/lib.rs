@@ -5,11 +5,14 @@ pub mod database {
     };
     use std::{
         collections::HashMap,
+        error::Error,
         fmt::Debug,
+        str::FromStr,
         sync::Mutex,
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use base64::{engine::general_purpose, Engine};
     #[derive(Debug)]
     pub struct AccountInfo {
         public_key: String,
@@ -26,13 +29,26 @@ pub mod database {
             &self.public_key
         }
 
-        pub fn verify_message(&self, message: &String, signature: &String) -> bool {
+        pub fn verify_message(
+            &self,
+            message: &String,
+            signature: &str,
+        ) -> Result<(), Box<dyn Error>> {
             let verifying_key: VerifyingKey =
                 VerifyingKey::from_public_key_pem(&self.public_key).expect("Invalid Public Key");
-
-            let sig: Signature = Signature::from_bytes(signature.as_bytes().try_into().unwrap());
-            verifying_key.verify(message.as_bytes(), &sig);
-            true
+            println!("one");
+            let decoded_signature: [u8; 64] = general_purpose::STANDARD
+                .decode(signature)
+                .expect("Decode Error")
+                .try_into()
+                .unwrap();
+            println!("two");
+            let sig: Signature = Signature::from_bytes(&decoded_signature);
+            println!("three");
+            match verifying_key.verify(message.as_bytes(), &sig) {
+                Ok(()) => Ok(()),
+                Err(e) => Err(Box::new(e)),
+            }
         }
 
         pub fn nonce(&self) -> &String {
@@ -99,7 +115,7 @@ pub mod response {
 }
 #[cfg(test)]
 mod signature_tests {
-    use super::signature;
+    use super::database::AccountInfo;
     use base64::{engine::general_purpose, Engine};
     use ed25519_dalek::{
         pkcs8::{DecodePrivateKey, DecodePublicKey},
@@ -124,6 +140,7 @@ MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
 
     #[test]
     fn decrypt_valid_test() {
+        let a = AccountInfo::new(String::from(PUBLIC_KEY));
         let signing_key: SigningKey =
             SigningKey::from_pkcs8_pem(&PRIVATE_KEY).expect("Invalid Private Key");
         let verifying_key: VerifyingKey =
@@ -136,6 +153,9 @@ MCowBQYDK2VwAyEA4zVrO5Sy/aK27QTnXZzum2QcXKpruZHLM+9MUhC7tbQ=
 
         assert!(verifying_key
             .verify(&MESSAGE.as_bytes(), &signature)
+            .is_ok());
+        debug_assert!(a
+            .verify_message(&String::from(MESSAGE), &OTHER_SIGNATURE)
             .is_ok());
     }
 }
