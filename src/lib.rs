@@ -1,13 +1,8 @@
 pub mod database {
-    use ed25519_dalek::{
-        pkcs8::{DecodePrivateKey, DecodePublicKey},
-        Signature, Signer, SigningKey, Verifier, VerifyingKey,
-    };
+    use ed25519_dalek::{pkcs8::DecodePublicKey, Signature, Verifier, VerifyingKey};
     use std::{
         collections::HashMap,
-        error::Error,
-        fmt::Debug,
-        str::FromStr,
+        fmt,
         sync::Mutex,
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -18,7 +13,26 @@ pub mod database {
         public_key: String,
         nonce: String,
     }
+    pub struct AccountInfoError {
+        message: String,
+    }
 
+    impl fmt::Display for AccountInfoError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "Account Error: {}", self.message)
+        }
+    }
+    impl fmt::Debug for AccountInfoError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "{{ Account Error -- file: {}, line: {} message: {}}}",
+                file!(),
+                line!(),
+                self.message
+            )
+        }
+    }
     impl AccountInfo {
         pub fn new(public_key: String) -> AccountInfo {
             let nonce = generate_nonce();
@@ -33,28 +47,43 @@ pub mod database {
             &self,
             message: &String,
             signature: &str,
-        ) -> Result<(), Box<dyn Error>> {
+        ) -> Result<(), AccountInfoError> {
             let verifying_key: VerifyingKey =
-                VerifyingKey::from_public_key_pem(&self.public_key).expect("Invalid Public Key");
-            println!("one");
-            let decoded_signature: [u8; 64] = general_purpose::STANDARD
+                match VerifyingKey::from_public_key_pem(&self.public_key) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        return Err(AccountInfoError {
+                            message: e.to_string(),
+                        });
+                    }
+                };
+            let decoded_signature: [u8; 64] = match general_purpose::STANDARD
                 .decode(signature)
-                .expect("Decode Error")
+                .expect("Signature decode error")
                 .try_into()
-                .unwrap();
-            println!("two");
+            {
+                Ok(signature) => signature,
+                Err(_) => {
+                    return Err(AccountInfoError {
+                        message: String::from("There was a problem casting from Vec to Array"),
+                    });
+                }
+            };
             let sig: Signature = Signature::from_bytes(&decoded_signature);
-            println!("three");
             match verifying_key.verify(message.as_bytes(), &sig) {
                 Ok(()) => Ok(()),
-                Err(e) => Err(Box::new(e)),
+                Err(e) => Err(AccountInfoError {
+                    message: e.to_string(),
+                }),
             }
         }
 
         pub fn nonce(&self) -> &String {
             &self.nonce
         }
-
+        pub fn new_nonce(&mut self) {
+            self.nonce = generate_nonce();
+        }
         pub fn verify_nonce(&self, input_nonce: &String) -> bool {
             self.nonce.eq(input_nonce)
         }
@@ -80,21 +109,7 @@ pub mod database {
             .to_string()
     }
 }
-pub mod signature {
-    use generic_array::GenericArray;
-    use sha2::{digest::generic_array::typenum::U32, Digest, Sha256};
-    pub fn hash(message: &str) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.update(message);
-        let hash = hasher.finalize();
-        println!("Result: {:x}", &hash);
-        hash.into()
-    }
 
-    fn decrypt(message: String, public_key: String) {
-        unimplemented!()
-    }
-}
 pub mod request {
     use serde::Deserialize;
     use std::fmt::Debug;
