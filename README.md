@@ -13,7 +13,7 @@ are sent unencrypted.
 
 We are only implementing the ED25519 cryptography algorithm. The more RSA256 is not used here. If you would like to test
 the web server demo with your own public/private key, you will need to generate one with this defined as the algorithm
-of choice. A tutorial of how to run this manually can be seen in the [Manually running](#manually_running) section
+of choice. A tutorial of how to run this manually can be seen in the [Manually running](#manually-running) section
 
 ## Installing
 
