@@ -14,5 +14,9 @@ Cargo.lock
 *.pdb
 
 
+# For python unittesting we create a virtual environment but we don't want to store this online
+tests/.venv
+
 # Custom
 ignore/
+
