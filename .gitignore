@@ -15,7 +15,7 @@ Cargo.lock
 
 
 # For python unittesting we create a virtual environment but we don't want to store this online
-tests/.venv
+tests/.venv/
 
 # Custom
 ignore/
