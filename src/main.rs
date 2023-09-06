@@ -39,7 +39,7 @@ fn register_user(db: &State<InMemDB>, acct: Json<Acct>) -> (Status, Json<RegResp
     let nonce = locked_db.get(&acct.account_name).unwrap().nonce();
 
     (
-        Status::Accepted,
+        Status::Created,
         Json(RegResponse {
             account_name: String::from(&acct.account_name),
             nonce: *nonce,
